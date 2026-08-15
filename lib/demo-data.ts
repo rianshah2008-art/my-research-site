@@ -21,6 +21,12 @@ function generateVitalsForDay(daysAgo: number): GarminVitals {
   const statuses = ["Productive", "Maintaining", "Overreaching", "Unproductive"];
   const hrvStatuses = ["Balanced", "Unbalanced"];
 
+  const acute = Math.round(200 + rand() * 400);
+  const chronic = Math.round(250 + rand() * 300);
+  const runPace = Math.round(420 + rand() * 60); // ~7:00–8:00 /mi
+  const ltPace = Math.round(400 + rand() * 40); // slightly faster than daily pace
+  const ltHr = Math.round(160 + rand() * 20);
+
   return {
     date,
     training_readiness: Math.round(55 + rand() * 40),
@@ -32,7 +38,9 @@ function generateVitalsForDay(daysAgo: number): GarminVitals {
     resting_hr: Math.round(48 + rand() * 12),
     active_calories: Math.round(300 + rand() * 600),
     total_calories_burned: Math.round(2200 + rand() * 800),
-    acute_load: Math.round(200 + rand() * 400),
+    acute_load: acute,
+    chronic_load: chronic,
+    load_ratio: Math.round((acute / chronic) * 100) / 100,
     vo2_max_run: Math.round((48 + rand() * 8) * 10) / 10,
     vo2_max_cycle: Math.round((42 + rand() * 6) * 10) / 10,
     workout_sweat_loss_ml: Math.round(rand() * 800),
@@ -45,6 +53,14 @@ function generateVitalsForDay(daysAgo: number): GarminVitals {
     light_sleep_min: Math.round(180 + rand() * 80),
     recovery_time_hours: Math.round(rand() * 48),
     hrv_value: Math.round(35 + rand() * 25),
+    run_pace_sec_per_mile: runPace,
+    bike_pace_sec_per_mile: Math.round(150 + rand() * 40), // ~2:30–3:10 /mi
+    swim_pace_sec_per_100m: Math.round(90 + rand() * 30), // ~1:30–2:00 /100m
+    lactate_threshold_hr: ltHr,
+    lactate_threshold_pace_sec: ltPace,
+    cycling_ftp_watts: Math.round(220 + rand() * 60),
+    heat_acclimation_pct: Math.round(rand() * 100),
+    altitude_acclimation_m: Math.round(rand() * 2500),
   };
 }
 

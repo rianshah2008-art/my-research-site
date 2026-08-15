@@ -7,7 +7,10 @@ import {
   Battery,
   Activity,
   Moon,
-  Dumbbell,
+  Clock,
+  BarChart3,
+  TrendingUp,
+  Scale,
 } from "lucide-react";
 import MetricCard from "@/app/components/MetricCard";
 import MetricModal from "@/app/components/MetricModal";
@@ -79,6 +82,14 @@ export default function RecoveryPage() {
     label2: "HRV (ms)",
   }));
 
+  const loadChartData = vitals.map((v) => ({
+    date: v.date,
+    value1: v.acute_load || 0,
+    value2: v.chronic_load || 0,
+    label1: "Acute Load",
+    label2: "Chronic Load",
+  }));
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -94,8 +105,8 @@ export default function RecoveryPage() {
           RECOVERY & READINESS
         </h1>
         <p className="text-slate-400 mt-1">
-          Athletic strain, sleep architecture & nervous system recovery ·{" "}
-          {formatDate(new Date())}
+          Athletic strain, sleep architecture, training load & nervous system
+          recovery · {formatDate(new Date())}
         </p>
       </div>
 
@@ -127,11 +138,7 @@ export default function RecoveryPage() {
           subtitle="current trajectory"
           icon={<Target className="w-5 h-5" />}
           onClick={() =>
-            openModal(
-              "Acute Load",
-              today.acute_load || 0,
-              "acute_load"
-            )
+            openModal("Acute Load", today.acute_load || 0, "acute_load")
           }
         >
           <span
@@ -192,10 +199,10 @@ export default function RecoveryPage() {
         </MetricCard>
 
         <MetricCard
-          title="Acute Workload & Recovery"
-          value={`${today.acute_load ?? "--"} load`}
-          subtitle={`${today.recovery_time_hours ?? "--"} hrs to full recovery`}
-          icon={<Dumbbell className="w-5 h-5" />}
+          title="Recovery Time"
+          value={today.recovery_time_hours ?? "--"}
+          subtitle="hours until full recovery"
+          icon={<Clock className="w-5 h-5" />}
           onClick={() =>
             openModal(
               "Recovery Time",
@@ -208,11 +215,75 @@ export default function RecoveryPage() {
         />
       </div>
 
-      <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">
-          7-Day Sleep Score vs. HRV Trend
-        </h2>
-        <DualLineChart data={hrvChartData} color1="#a78bfa" color2="#34d399" />
+      {/* Training Load section */}
+      <h2 className="text-lg font-semibold text-white mb-4">Training Load</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <MetricCard
+          title="Acute Load"
+          value={today.acute_load ?? "--"}
+          subtitle="7-day training strain"
+          icon={<BarChart3 className="w-5 h-5" />}
+          onClick={() =>
+            openModal("Acute Load", today.acute_load || 0, "acute_load")
+          }
+        />
+
+        <MetricCard
+          title="Chronic Load"
+          value={today.chronic_load ?? "--"}
+          subtitle="28-day fitness baseline"
+          icon={<TrendingUp className="w-5 h-5" />}
+          onClick={() =>
+            openModal("Chronic Load", today.chronic_load || 0, "chronic_load")
+          }
+        />
+
+        <MetricCard
+          title="Load Ratio"
+          value={
+            today.load_ratio != null
+              ? today.load_ratio.toFixed(2)
+              : today.acute_load && today.chronic_load
+                ? (today.acute_load / today.chronic_load).toFixed(2)
+                : "--"
+          }
+          subtitle="acute ÷ chronic (0.8–1.3 ideal)"
+          icon={<Scale className="w-5 h-5" />}
+          onClick={() =>
+            openModal(
+              "Load Ratio",
+              today.load_ratio ??
+                (today.acute_load && today.chronic_load
+                  ? Math.round((today.acute_load / today.chronic_load) * 100) /
+                    100
+                  : 0),
+              "load_ratio"
+            )
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">
+            7-Day Sleep Score vs. HRV Trend
+          </h2>
+          <DualLineChart
+            data={hrvChartData}
+            color1="#a78bfa"
+            color2="#34d399"
+          />
+        </div>
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">
+            7-Day Acute vs. Chronic Load
+          </h2>
+          <DualLineChart
+            data={loadChartData}
+            color1="#f97316"
+            color2="#22d3ee"
+          />
+        </div>
       </div>
 
       {modal && (

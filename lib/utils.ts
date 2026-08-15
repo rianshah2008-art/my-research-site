@@ -60,6 +60,14 @@ export function formatDuration(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
+/** Format seconds as m:ss pace (e.g. 7:32 /mi) */
+export function formatPace(seconds: number | null | undefined): string {
+  if (seconds == null || Number.isNaN(seconds) || seconds <= 0) return "--";
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export function getTrainingStatusColor(status: string | null): string {
   switch (status?.toLowerCase()) {
     case "productive":

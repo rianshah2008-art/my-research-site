@@ -5,7 +5,8 @@ Dark-mode health dashboard syncing Garmin Connect metrics, AI photo nutrition es
 ## Features
 
 - **Daily Vitals** — Steps, resting HR, calories, SpO₂, respiration, stress
-- **Recovery & Readiness** — Training readiness, body battery, HRV, sleep architecture
+- **Recovery & Readiness** — Training readiness, body battery, HRV, sleep architecture, training load (acute / chronic / ratio)
+- **Training** — Run/bike/swim pace, lactate threshold, cycling FTP, heat & altitude acclimation
 - **Weight & Nutrition** — Weight logger, sweat-adjusted hydration, Gemini AI meal scanner
 
 All metric cards open interactive 7-day trend modals powered by Recharts.

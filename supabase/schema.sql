@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS garmin_vitals (
   resting_hr INT,
   active_calories INT,
   total_calories_burned INT,
+  -- Training Load (Recovery page)
   acute_load INT,
+  chronic_load INT,
+  load_ratio FLOAT,
   vo2_max_run FLOAT,
   vo2_max_cycle FLOAT,
   workout_sweat_loss_ml INT DEFAULT 0,
@@ -29,7 +32,18 @@ CREATE TABLE IF NOT EXISTS garmin_vitals (
   rem_sleep_min INT,
   light_sleep_min INT,
   recovery_time_hours INT,
-  hrv_value FLOAT
+  hrv_value FLOAT,
+  -- Pace / Time (Training page) — stored in seconds
+  run_pace_sec_per_mile FLOAT,
+  bike_pace_sec_per_mile FLOAT,
+  swim_pace_sec_per_100m FLOAT,
+  -- Thresholds (Training page)
+  lactate_threshold_hr INT,
+  lactate_threshold_pace_sec FLOAT,
+  cycling_ftp_watts INT,
+  -- Environment Acclimation (Training page)
+  heat_acclimation_pct INT,
+  altitude_acclimation_m INT
 );
 
 -- AI-analyzed nutrition logs from meal photos
@@ -77,3 +91,18 @@ CREATE POLICY "Allow all for garmin_vitals" ON garmin_vitals FOR ALL USING (true
 CREATE POLICY "Allow all for nutrition_logs" ON nutrition_logs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for weight_logs" ON weight_logs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for hydration_logs" ON hydration_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- ---------------------------------------------------------------------------
+-- Incremental migration for existing deployments
+-- Safe to re-run: ADD COLUMN IF NOT EXISTS
+-- ---------------------------------------------------------------------------
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS chronic_load INT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS load_ratio FLOAT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS run_pace_sec_per_mile FLOAT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS bike_pace_sec_per_mile FLOAT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS swim_pace_sec_per_100m FLOAT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS lactate_threshold_hr INT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS lactate_threshold_pace_sec FLOAT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS cycling_ftp_watts INT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS heat_acclimation_pct INT;
+ALTER TABLE garmin_vitals ADD COLUMN IF NOT EXISTS altitude_acclimation_m INT;
