@@ -17,7 +17,7 @@ All metric cards open interactive 7-day trend modals powered by Recharts.
 - Supabase (PostgreSQL)
 - Recharts for data visualization
 - Gemini 2.5 Flash for meal photo analysis
-- Python `python-garminconnect` sync engine
+- `garmin-connect` npm package (TypeScript sync via `/api/sync-garmin`)
 
 ## Setup
 
@@ -25,7 +25,6 @@ All metric cards open interactive 7-day trend modals powered by Recharts.
 
 ```bash
 npm install
-pip install -r backend/requirements.txt
 ```
 
 ### 2. Configure environment
@@ -50,11 +49,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### 5. Sync Garmin data
 
-Click **Sync Garmin Data** on the Daily Vitals page, or run manually:
-
-```bash
-python backend/garmin_sync.py
-```
+Click **Sync Garmin Data** on the Daily Vitals page. This calls `/api/sync-garmin`, which logs into Garmin Connect with the `garmin-connect` npm package and upserts today's vitals into Supabase — no Python runtime required (works on Vercel Node serverless).
 
 ## Environment Variables
 
@@ -62,7 +57,7 @@ python backend/garmin_sync.py
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (for server-side & Python sync) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Optional service role key for server-side writes |
 | `GARMIN_EMAIL` | Garmin Connect email |
 | `GARMIN_PASSWORD` | Garmin Connect password |
 | `GEMINI_API_KEY` | Google Gemini API key for meal analysis |
