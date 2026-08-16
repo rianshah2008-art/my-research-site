@@ -1,6 +1,7 @@
 import { format, subDays } from "date-fns";
 import { GarminConnect } from "garmin-connect";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { vitalsToRow } from "@/lib/garmin-db";
 import type { GarminVitals } from "@/lib/types";
 
 const GC_API = "https://connectapi.garmin.com";
@@ -417,10 +418,11 @@ export async function syncGarminToSupabase(): Promise<{
 
   const today = format(new Date(), "yyyy-MM-dd");
   const vitals = await fetchGarminVitalsForDate(client, today);
+  const row = vitalsToRow(vitals, email);
 
   const { error } = await supabase
     .from("garmin_vitals")
-    .upsert(vitals, { onConflict: "date" });
+    .upsert(row, { onConflict: "user_id,date" });
 
   if (error) {
     throw new Error(`Supabase upsert failed: ${error.message}`);
@@ -450,7 +452,9 @@ export async function syncGarminLastNDays(days = 7): Promise<Partial<GarminVital
     const vitals = await fetchGarminVitalsForDate(client, dateStr);
     results.push(vitals);
     if (supabase) {
-      await supabase.from("garmin_vitals").upsert(vitals, { onConflict: "date" });
+      await supabase
+        .from("garmin_vitals")
+        .upsert(vitalsToRow(vitals, email), { onConflict: "user_id,date" });
     }
   }
 
