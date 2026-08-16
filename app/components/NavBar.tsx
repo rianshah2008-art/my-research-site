@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Heart, UtensilsCrossed } from "lucide-react";
+import { Activity, Heart, UtensilsCrossed, Timer } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Daily Vitals", icon: Activity },
   { href: "/recovery", label: "Recovery & Readiness", icon: Heart },
+  { href: "/training", label: "Training", icon: Timer },
   { href: "/nutrition", label: "Weight & Nutrition", icon: UtensilsCrossed },
 ];
 
@@ -36,14 +37,14 @@ export default function NavBar() {
                   key={href}
                   href={href}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                    "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                     isActive
                       ? "bg-slate-800 text-cyan-400"
                       : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                   )}
                 >
                   <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{label}</span>
+                  <span className="hidden md:inline">{label}</span>
                 </Link>
               );
             })}

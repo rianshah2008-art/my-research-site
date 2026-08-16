@@ -9,7 +9,10 @@ export interface GarminVitals {
   resting_hr: number | null;
   active_calories: number | null;
   total_calories_burned: number | null;
+  // Training Load
   acute_load: number | null;
+  chronic_load: number | null;
+  load_ratio: number | null;
   vo2_max_run: number | null;
   vo2_max_cycle: number | null;
   workout_sweat_loss_ml: number | null;
@@ -22,6 +25,17 @@ export interface GarminVitals {
   light_sleep_min: number | null;
   recovery_time_hours: number | null;
   hrv_value: number | null;
+  // Pace / Time (seconds)
+  run_pace_sec_per_mile: number | null;
+  bike_pace_sec_per_mile: number | null;
+  swim_pace_sec_per_100m: number | null;
+  // Thresholds
+  lactate_threshold_hr: number | null;
+  lactate_threshold_pace_sec: number | null;
+  cycling_ftp_watts: number | null;
+  // Environment
+  heat_acclimation_pct: number | null;
+  altitude_acclimation_m: number | null;
 }
 
 export interface NutritionLog {
@@ -78,7 +92,17 @@ export type MetricKey =
   | "hrv_value"
   | "sleep_score"
   | "acute_load"
+  | "chronic_load"
+  | "load_ratio"
   | "recovery_time_hours"
+  | "run_pace_sec_per_mile"
+  | "bike_pace_sec_per_mile"
+  | "swim_pace_sec_per_100m"
+  | "lactate_threshold_hr"
+  | "lactate_threshold_pace_sec"
+  | "cycling_ftp_watts"
+  | "heat_acclimation_pct"
+  | "altitude_acclimation_m"
   | "calories"
   | "protein_g"
   | "hydration_ml"

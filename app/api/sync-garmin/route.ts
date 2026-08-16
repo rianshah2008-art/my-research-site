@@ -1,52 +1,19 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
-import path from "path";
+import { syncGarminToSupabase } from "@/lib/garmin-sync";
 
-const execAsync = promisify(exec);
+export const runtime = "nodejs";
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const email = process.env.GARMIN_EMAIL;
-  const password = process.env.GARMIN_PASSWORD;
-
-  if (!email || !password) {
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          "Garmin credentials not configured. Set GARMIN_EMAIL and GARMIN_PASSWORD.",
-        demo: true,
-      },
-      { status: 200 }
-    );
-  }
-
   try {
-    const scriptPath = path.join(process.cwd(), "backend", "garmin_sync.py");
-    const { stdout, stderr } = await execAsync(
-      `python3 "${scriptPath}"`,
-      {
-        env: {
-          ...process.env,
-          GARMIN_EMAIL: email,
-          GARMIN_PASSWORD: password,
-        },
-        timeout: 120000,
-      }
-    );
-
-    if (stderr && !stdout.includes("SUCCESS")) {
-      console.error("Garmin sync stderr:", stderr);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Garmin data synced successfully",
-      output: stdout.trim(),
+    const result = await syncGarminToSupabase();
+    return NextResponse.json(result, {
+      status: result.success || result.demo ? 200 : 500,
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Sync failed";
+      error instanceof Error ? error.message : "Garmin sync failed";
     console.error("Garmin sync error:", message);
     return NextResponse.json(
       { success: false, message: `Garmin sync failed: ${message}` },
