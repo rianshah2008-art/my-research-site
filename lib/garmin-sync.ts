@@ -2,6 +2,11 @@ import { format, subDays } from "date-fns";
 import { GarminConnect } from "garmin-connect";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { vitalsToRow } from "@/lib/garmin-db";
+import { upsertGarminVitals, invalidateGarminColumnCache } from "@/lib/garmin-upsert";
+import {
+  applyGarminMigrationViaManagementApi,
+  reloadPostgrestSchema,
+} from "@/lib/supabase-migrate";
 import type { GarminVitals } from "@/lib/types";
 
 const GC_API = "https://connectapi.garmin.com";
@@ -387,6 +392,8 @@ export async function syncGarminToSupabase(): Promise<{
   message: string;
   vitals?: Partial<GarminVitals>;
   demo?: boolean;
+  strippedColumns?: string[];
+  migration?: string;
 }> {
   const email = process.env.GARMIN_EMAIL;
   const password = process.env.GARMIN_PASSWORD;
@@ -413,6 +420,22 @@ export async function syncGarminToSupabase(): Promise<{
     return { success: false, message: "Failed to initialize Supabase client." };
   }
 
+  // Best-effort: apply missing columns via Management API when token is present
+  let migrationMessage: string | undefined;
+  try {
+    const migration = await applyGarminMigrationViaManagementApi();
+    migrationMessage = migration.message;
+    if (migration.success) {
+      await reloadPostgrestSchema();
+      invalidateGarminColumnCache();
+    }
+  } catch (error) {
+    migrationMessage =
+      error instanceof Error
+        ? `Auto-migration skipped: ${error.message}`
+        : "Auto-migration skipped";
+  }
+
   const client = new GarminConnect({ username: email, password });
   await client.login();
 
@@ -420,18 +443,28 @@ export async function syncGarminToSupabase(): Promise<{
   const vitals = await fetchGarminVitalsForDate(client, today);
   const row = vitalsToRow(vitals, email);
 
-  const { error } = await supabase
-    .from("garmin_vitals")
-    .upsert(row, { onConflict: "user_id,date" });
-
-  if (error) {
-    throw new Error(`Supabase upsert failed: ${error.message}`);
+  const upsert = await upsertGarminVitals(supabase, row);
+  if (!upsert.success) {
+    throw new Error(
+      `Supabase upsert failed: ${upsert.error}${
+        upsert.strippedColumns.length
+          ? ` (stripped: ${upsert.strippedColumns.join(", ")})`
+          : ""
+      }`
+    );
   }
+
+  const strippedNote =
+    upsert.strippedColumns.length > 0
+      ? ` (omitted missing columns: ${upsert.strippedColumns.join(", ")})`
+      : "";
 
   return {
     success: true,
-    message: `Garmin data synced for ${today}`,
+    message: `Garmin data synced for ${today}${strippedNote}`,
     vitals,
+    strippedColumns: upsert.strippedColumns,
+    migration: migrationMessage,
   };
 }
 
@@ -452,9 +485,7 @@ export async function syncGarminLastNDays(days = 7): Promise<Partial<GarminVital
     const vitals = await fetchGarminVitalsForDate(client, dateStr);
     results.push(vitals);
     if (supabase) {
-      await supabase
-        .from("garmin_vitals")
-        .upsert(vitalsToRow(vitals, email), { onConflict: "user_id,date" });
+      await upsertGarminVitals(supabase, vitalsToRow(vitals, email));
     }
   }
 
