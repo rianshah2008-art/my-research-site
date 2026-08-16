@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS public.garmin_vitals (
   cycling_ftp_watts INT8,
   heat_acclimation_pct INT8,
   altitude_acclimation_m INT8,
+  -- Overflow for metrics not yet promoted to concrete columns
+  raw_data JSONB DEFAULT '{}'::jsonb,
   CONSTRAINT unique_user_date UNIQUE (user_id, date)
 );
 
@@ -87,6 +89,7 @@ ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS lactate_threshold_pace
 ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS cycling_ftp_watts INT8;
 ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS heat_acclimation_pct INT8;
 ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS altitude_acclimation_m INT8;
+ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS raw_data JSONB DEFAULT '{}'::jsonb;
 
 -- Backfill renamed columns from older Apex schema names (if present)
 DO $$

@@ -26,6 +26,7 @@ ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS lactate_threshold_pace
 ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS cycling_ftp_watts INT8;
 ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS heat_acclimation_pct INT8;
 ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS altitude_acclimation_m INT8;
+ALTER TABLE public.garmin_vitals ADD COLUMN IF NOT EXISTS raw_data JSONB DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_garmin_vitals_date ON public.garmin_vitals(date DESC);
 

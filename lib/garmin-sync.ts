@@ -454,14 +454,16 @@ export async function syncGarminToSupabase(): Promise<{
     );
   }
 
-  const strippedNote =
-    upsert.strippedColumns.length > 0
-      ? ` (omitted missing columns: ${upsert.strippedColumns.join(", ")})`
-      : "";
+  const details: string[] = [];
+  if (upsert.usedRawData) details.push("extras stored in raw_data");
+  if (upsert.strippedColumns.length > 0) {
+    details.push(`overflow: ${upsert.strippedColumns.join(", ")}`);
+  }
+  const detailNote = details.length ? ` (${details.join("; ")})` : "";
 
   return {
     success: true,
-    message: `Garmin data synced for ${today}${strippedNote}`,
+    message: `Garmin data synced for ${today}${detailNote}`,
     vitals,
     strippedColumns: upsert.strippedColumns,
     migration: migrationMessage,

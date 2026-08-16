@@ -45,6 +45,8 @@ export const GARMIN_EXTENDED_COLUMNS = [
   "altitude_acclimation_m",
 ] as const;
 
+const IDENTITY_COLUMNS = new Set(["id", "user_id", "date", "created_at"]);
+
 const MISSING_COLUMN_RE =
   /Could not find the '([^']+)' column|column ["'`]?([a-zA-Z0-9_]+)["'`]? (?:does not exist|of relation)|PGRST204/i;
 
@@ -63,7 +65,7 @@ function stripUndefined(
 }
 
 export function pickColumns(
-  row: GarminVitalsRow,
+  row: GarminVitalsRow | Record<string, unknown>,
   allowed: Iterable<string>
 ): Record<string, unknown> {
   const allow = new Set(allowed);
@@ -71,9 +73,8 @@ export function pickColumns(
   for (const [key, value] of Object.entries(row)) {
     if (allow.has(key) && value !== undefined) out[key] = value;
   }
-  // date + user_id are required for the unique constraint
-  if (row.date) out.date = row.date;
-  if (row.user_id !== undefined) out.user_id = row.user_id;
+  if ("date" in row && row.date) out.date = row.date;
+  if ("user_id" in row && row.user_id !== undefined) out.user_id = row.user_id;
   return out;
 }
 
@@ -139,76 +140,249 @@ function extractMissingColumn(message: string): string | null {
   return match[1] || match[2] || null;
 }
 
+function isMissingColumnError(message: string): boolean {
+  return MISSING_COLUMN_RE.test(message) || /schema cache/i.test(message);
+}
+
+function isConflictTargetError(message: string): boolean {
+  return /no unique|ON CONFLICT|conflict|unique constraint|there is no unique or exclusion constraint/i.test(
+    message
+  );
+}
+
+/**
+ * Split a full vitals row into:
+ * - known/allowed table columns
+ * - extras that should live in raw_data JSONB when columns are missing
+ */
+export function splitCoreAndRawData(
+  fullRow: Record<string, unknown>,
+  knownColumns: Set<string>
+): {
+  tablePayload: Record<string, unknown>;
+  rawData: Record<string, unknown>;
+} {
+  const tablePayload: Record<string, unknown> = {};
+  const rawData: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(fullRow)) {
+    if (value === undefined) continue;
+    if (key === "raw_data") continue;
+    if (knownColumns.has(key)) {
+      tablePayload[key] = value;
+    } else {
+      rawData[key] = value;
+    }
+  }
+
+  // Always keep identity fields on the table row
+  if (fullRow.date) tablePayload.date = fullRow.date;
+  if (fullRow.user_id !== undefined) tablePayload.user_id = fullRow.user_id;
+
+  if (Object.keys(rawData).length > 0 && knownColumns.has("raw_data")) {
+    tablePayload.raw_data = rawData;
+  }
+
+  return { tablePayload, rawData };
+}
+
 export interface UpsertGarminResult {
   success: boolean;
   strippedColumns: string[];
+  usedRawData: boolean;
+  onConflict: string;
   payload: Record<string, unknown>;
   error?: string;
 }
 
+async function attemptUpsert(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+  onConflict: "user_id,date" | "id"
+) {
+  return supabase.from("garmin_vitals").upsert(payload, { onConflict });
+}
+
 /**
- * Upsert garmin_vitals with payload sanitization:
- * 1) Prefer OpenAPI-discovered columns when available
- * 2) On missing-column / PGRST204 errors, strip the offending key and retry
- * 3) Fall back across conflict targets (user_id,date) → date
+ * Upsert garmin_vitals with explicit onConflict and raw_data fallback:
+ * 1) Upsert with onConflict: 'user_id,date' (fallback 'id')
+ * 2) On missing-column errors, move unknown/extra fields into raw_data JSONB
+ * 3) Retry with core columns + raw_data so sync always succeeds when possible
  */
 export async function upsertGarminVitals(
   supabase: SupabaseClient,
   row: GarminVitalsRow
 ): Promise<UpsertGarminResult> {
   const discovered = await discoverGarminVitalsColumns();
-  const preferred =
+  const fullRow = stripUndefined(row as unknown as Record<string, unknown>);
+
+  // Prefer discovered schema; otherwise assume core + extended (+ raw_data)
+  const knownColumns =
     discovered && discovered.size > 0
-      ? discovered
-      : new Set<string>([...GARMIN_CORE_COLUMNS, ...GARMIN_EXTENDED_COLUMNS]);
+      ? new Set(discovered)
+      : new Set<string>([
+          ...GARMIN_CORE_COLUMNS,
+          ...GARMIN_EXTENDED_COLUMNS,
+          "raw_data",
+          "id",
+        ]);
 
-  let payload = stripUndefined(pickColumns(row, preferred));
+  const split = splitCoreAndRawData(fullRow, knownColumns);
+  let rawData = split.rawData;
+  let payload = stripUndefined(split.tablePayload);
   const strippedColumns: string[] = [];
+  let usedRawData = Object.keys(rawData).length > 0 && "raw_data" in payload;
 
-  const conflictTargets = ["user_id,date", "date"] as const;
+  const conflictTargets: Array<"user_id,date" | "id"> = ["user_id,date", "id"];
 
   for (const onConflict of conflictTargets) {
+    // Skip id conflict if we don't have an id to upsert on
+    if (onConflict === "id" && !payload.id) continue;
+
     let attempts = 0;
-    while (attempts < 50) {
+    while (attempts < 40) {
       attempts += 1;
-      const { error } = await supabase
-        .from("garmin_vitals")
-        .upsert(payload, { onConflict });
+
+      const { error } = await attemptUpsert(supabase, payload, onConflict);
 
       if (!error) {
         if (discovered) {
-          // Keep cache warm with columns we successfully wrote
           for (const key of Object.keys(payload)) discovered.add(key);
         }
-        return { success: true, strippedColumns, payload };
+        return {
+          success: true,
+          strippedColumns,
+          usedRawData,
+          onConflict,
+          payload,
+        };
       }
 
-      const missing = extractMissingColumn(error.message);
-      if (missing && missing in payload) {
-        delete payload[missing];
-        strippedColumns.push(missing);
-        if (discovered) discovered.delete(missing);
-        continue;
-      }
+      // Missing column → peel it off into raw_data and retry
+      if (isMissingColumnError(error.message)) {
+        const missing = extractMissingColumn(error.message);
 
-      // Conflict target mismatch — try next strategy
-      const conflictIssue =
-        /no unique|ON CONFLICT|conflict|unique constraint/i.test(
-          error.message
+        if (missing === "raw_data") {
+          // Table has no raw_data yet — drop extras, keep lean core write
+          delete payload.raw_data;
+          usedRawData = false;
+          if (missing) {
+            strippedColumns.push(...Object.keys(rawData));
+            rawData = {};
+          }
+          // Also strip any non-core keys still on the payload
+          const coreOnly = pickColumns(
+            { ...fullRow, ...payload },
+            GARMIN_CORE_COLUMNS
+          );
+          payload = stripUndefined(coreOnly);
+          continue;
+        }
+
+        if (missing && missing in payload) {
+          // Move this field into raw_data bucket
+          if (!IDENTITY_COLUMNS.has(missing) && missing !== "updated_at") {
+            rawData[missing] = payload[missing];
+            strippedColumns.push(missing);
+          }
+          delete payload[missing];
+          knownColumns.delete(missing);
+          if (discovered) discovered.delete(missing);
+
+          // Attach raw_data if the column exists (or we haven't proven otherwise)
+          if (Object.keys(rawData).length > 0) {
+            payload.raw_data = { ...rawData };
+            usedRawData = true;
+          }
+          continue;
+        }
+
+        // Generic missing-column / schema-cache error without a clear name:
+        // collapse to core columns + raw_data JSON blob of everything else
+        const corePayload = stripUndefined(
+          pickColumns(fullRow, GARMIN_CORE_COLUMNS)
         );
-      if (conflictIssue) break;
+        const extras: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(fullRow)) {
+          if (
+            value === undefined ||
+            key === "raw_data" ||
+            GARMIN_CORE_COLUMNS.includes(
+              key as (typeof GARMIN_CORE_COLUMNS)[number]
+            ) ||
+            IDENTITY_COLUMNS.has(key)
+          ) {
+            continue;
+          }
+          extras[key] = value;
+          if (!strippedColumns.includes(key)) strippedColumns.push(key);
+        }
 
-      // Unknown schema error — last resort: lean core-only payload
-      if (attempts === 1) {
-        payload = stripUndefined(pickColumns(row, GARMIN_CORE_COLUMNS));
+        payload = { ...corePayload };
+        if (Object.keys(extras).length > 0) {
+          payload.raw_data = extras;
+          usedRawData = true;
+          rawData = extras;
+        }
         continue;
+      }
+
+      // Wrong conflict target — try next (user_id,date → id)
+      if (isConflictTargetError(error.message)) {
+        break;
       }
 
       return {
         success: false,
         strippedColumns,
+        usedRawData,
+        onConflict,
         payload,
         error: error.message,
+      };
+    }
+  }
+
+  // Final guaranteed attempt: absolute lean core (no raw_data) so sync can succeed
+  const finalCore = stripUndefined(pickColumns(fullRow, GARMIN_CORE_COLUMNS));
+  const { error: finalError } = await attemptUpsert(
+    supabase,
+    finalCore,
+    "user_id,date"
+  );
+
+  if (!finalError) {
+    return {
+      success: true,
+      strippedColumns: [
+        ...strippedColumns,
+        ...Object.keys(fullRow).filter(
+          (k) =>
+            !(GARMIN_CORE_COLUMNS as readonly string[]).includes(k) &&
+            !IDENTITY_COLUMNS.has(k) &&
+            k !== "raw_data"
+        ),
+      ],
+      usedRawData: false,
+      onConflict: "user_id,date",
+      payload: finalCore,
+    };
+  }
+
+  // Last resort: conflict on id if present
+  if (fullRow.id) {
+    const { error: idError } = await attemptUpsert(
+      supabase,
+      { ...finalCore, id: fullRow.id },
+      "id"
+    );
+    if (!idError) {
+      return {
+        success: true,
+        strippedColumns,
+        usedRawData: false,
+        onConflict: "id",
+        payload: { ...finalCore, id: fullRow.id },
       };
     }
   }
@@ -216,8 +390,11 @@ export async function upsertGarminVitals(
   return {
     success: false,
     strippedColumns,
-    payload,
+    usedRawData,
+    onConflict: "user_id,date",
+    payload: finalCore,
     error:
-      "Failed to upsert garmin_vitals after sanitizing payload and conflict targets",
+      finalError.message ||
+      "Failed to upsert garmin_vitals after raw_data fallback",
   };
 }
